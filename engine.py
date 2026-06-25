@@ -129,7 +129,8 @@ def _new_state(seed=_DEFAULT_SEED):
             "season_id": "spring", "season_length": 20, "season_started_turn": 0,
             "points": 200, "location_id": "moonlit_pond", "unlocked_locations": ["moonlit_pond", "reed_river"],
             "bait_inventory": {"basic_worm": 5}, "catch_inventory": [], "items": {}, "pending_chests": [], "seen_letters": {},
-            "encyclopedia": {}, "stats": {"total_casts": 0, "total_caught": 0, "total_chests": 0}, "local_dry": 0}
+            "encyclopedia": {}, "stats": {"total_casts": 0, "total_caught": 0, "total_chests": 0}, "local_dry": 0,
+            "fever": 0, "free_bait": 0}   # 幸运事件挂的 buff：剩余翻倍竿数 / 剩余免饵竿数
 
 S = None
 def _load():
@@ -149,6 +150,7 @@ def _load():
     else:
         S = _new_state()   # 首次运行，找不到存档是正常的，不提示
     S.setdefault("items", {}); S.setdefault("pending_chests", []); S.setdefault("seen_letters", {}); S.setdefault("local_dry", 0)
+    S.setdefault("fever", 0); S.setdefault("free_bait", 0)
     S.setdefault("stats", {}).setdefault("total_chests", 0)
     S["stats"].setdefault("total_casts", 0); S["stats"].setdefault("total_caught", 0)
     return S
@@ -282,6 +284,8 @@ def _state_json():
          "turn": S["turn"], "enc": "%d/%d" % (len(S["encyclopedia"]), len(FISH)),
          "bait": bait, "hold": len(S["catch_inventory"])}   # hold=未卖渔获条数
     if S.get("pending_chests"): j["chest"] = len(S["pending_chests"])
+    if S.get("fever", 0) > 0: j["fever"] = S["fever"]            # 剩余翻倍竿数
+    if S.get("free_bait", 0) > 0: j["free_bait"] = S["free_bait"]  # 剩余免饵竿数
     return "📊 " + json.dumps(j, ensure_ascii=False)
 # 某地点当季还有几种没见过的鱼：normal=常规(常见~史诗)、legend=传说/神话(单列、可遇不可求)。
 # 传说/神话只算这地"专属"的（排除 locations:["all"] 的全域神话，免得每个钓点都被顶高、也免凑不满常规墙）。
@@ -453,6 +457,66 @@ def _secret_hint():
         return "\n（你开始怀疑，这片水域当季或许已经没有更多秘密了——也许该 goto 换个地方，或等季节流转，去别处寻新鱼群。）"
     return ""
 # 单步抛竿：返回 dict（text + 结构化结果）。rng 由调用方管理生命周期，确保连钓与单竿 rng 一致。
+# 记一条渔获：进渔篓 + 更新图鉴 + 首次发现奖励。主钓/分裂/热潮翻倍共用，确保编号与图鉴一致。
+def _record_catch(f, size, value):
+    inst = "c_%03d" % (S["stats"]["total_caught"] + 1)
+    S["catch_inventory"].append({"instance_id": inst, "fish_id": f["id"], "size": size, "value": value})
+    S["stats"]["total_caught"] += 1
+    first = _upd_enc(f, size, value)
+    bonus = RARITY[f["rarity"]]["discovery_bonus"] if first else 0
+    if bonus: S["points"] += bonus
+    return inst, first, bonus
+
+# ── 幸运随机事件：成功钓到鱼后小概率触发，立即生效或给后续几竿挂 buff ──
+LUCK_CHANCE = 0.05          # 每条成功渔获后触发幸运事件的概率
+_FEVER_CASTS = 3            # 渔获热潮持续竿数
+_FREE_BAIT_CASTS = 3       # 河神祝福免饵竿数
+_LUCK_EVENTS = [
+    {"id": "split_hook", "weight": 28},
+    {"id": "golden_touch", "weight": 24},
+    {"id": "fever", "weight": 16},
+    {"id": "river_blessing", "weight": 16},
+    {"id": "tide_record", "weight": 8},
+    {"id": "lucky_pearl", "weight": 8},
+]
+def _roll_luck(rng, pool, bait_id, f, size, inst):
+    if rng.random() >= LUCK_CHANCE: return "", None
+    eid = _pick_by_weight(rng, _LUCK_EVENTS)["id"]
+    if eid == "split_hook":   # 鱼钩一分为三：再钓上两条
+        weights = [_eff_weight(g, S["location_id"], S["season_id"], bait_id) for g in pool]
+        got = []
+        for _ in range(2):
+            g = _wpick(rng, pool, weights); gs = _roll_size(rng, g); gv = _value(g, gs)
+            gi, gfirst, _b = _record_catch(g, gs, gv)
+            got.append("%s%s %s%s[%s]" % (g["name"], "★新" if gfirst else "", gs, g["size_unit"], gi))
+        return "🪝✨ 分裂鱼钩！鱼钩一分为三，又拽上来两条：" + "、".join(got), eid
+    if eid == "golden_touch":   # 这条价值 ×3
+        c = next((x for x in S["catch_inventory"] if x["instance_id"] == inst), None)
+        if not c: return "", None
+        old = c["value"]; c["value"] = old * 3
+        return "✨💰 点石成金！这条价值 ×3：%d → %d 点" % (old, c["value"]), eid
+    if eid == "fever":
+        S["fever"] = S.get("fever", 0) + _FEVER_CASTS
+        return "🔥 渔获热潮！接下来钓到的 %d 条鱼都会翻倍。" % _FEVER_CASTS, eid
+    if eid == "river_blessing":
+        if bait_id: S["bait_inventory"][bait_id] = S["bait_inventory"].get(bait_id, 0) + 1
+        S["free_bait"] = S.get("free_bait", 0) + _FREE_BAIT_CASTS
+        return "🌊🙏 河神的祝福！退还这一竿的饵，接下来 %d 竿不耗鱼饵。" % _FREE_BAIT_CASTS, eid
+    if eid == "tide_record":   # 这条直接涨到该种极限体型
+        c = next((x for x in S["catch_inventory"] if x["instance_id"] == inst), None)
+        if not c: return "", None
+        rs = f["size_max"]; rv = _value(f, rs)
+        e = S["encyclopedia"].get(f["id"])
+        if e: e["max_size"] = max(e["max_size"], rs); e["total_value_earned"] += max(0, rv - c["value"])
+        c["size"] = rs; c["value"] = rv
+        return "🌊📏 千载难逢的涨潮！这条猛涨到极限 %s%s，价值 %d 点。" % (rs, f["size_unit"], rv), eid
+    if eid == "lucky_pearl":   # 鱼肚里掏出一枚随机财宝
+        treasures = [k for k, v in ITEMS.items() if v.get("sellable")]
+        tk = treasures[rng.rint(0, len(treasures) - 1)]
+        S["items"][tk] = S["items"].get(tk, 0) + 1
+        return "🦪✨ 蚌中生珠！鱼肚里滚出一枚%s（可 sell item %s）。" % (ITEMS[tk]["name"], tk), eid
+    return "", None
+
 def _cast_step(rng, bait_id):
     inv = S["bait_inventory"]
     if not bait_id:
@@ -461,7 +525,8 @@ def _cast_step(rng, bait_id):
         bait_id = sorted(avail, key=lambda b: BAITS[b]["cost"])[0]
     if bait_id not in BAITS: return {"text": "没有这种鱼饵：%s" % bait_id, "consumed": False, "kind": "bad_bait", "season_changed": False}
     if inv.get(bait_id, 0) <= 0: return {"text": "%s 用光了。换一种或去 shop 买。（没扣回合）" % BAITS[bait_id]["name"], "consumed": False, "kind": "no_bait", "season_changed": False}
-    inv[bait_id] -= 1
+    if S.get("free_bait", 0) > 0: S["free_bait"] -= 1   # 河神祝福：本竿不耗饵
+    else: inv[bait_id] -= 1
     bait = BAITS[bait_id]
     S["turn"] += 1; S["stats"]["total_casts"] += 1
     season_msg = _adv_season(); season_changed = season_msg != ""
@@ -480,16 +545,20 @@ def _cast_step(rng, bait_id):
         return {"text": season_msg + "浮标纹丝不动……这片水域这个季节什么都没咬钩。%s%s" % (_ambience(loc, rng), _secret_hint()), "consumed": True, "kind": "empty", "season_changed": season_changed}
     weights = [_eff_weight(f, S["location_id"], S["season_id"], bait_id) for f in pool]
     f = _wpick(rng, pool, weights); size = _roll_size(rng, f); value = _value(f, size)
-    inst = "c_%03d" % (S["stats"]["total_caught"] + 1)
-    S["catch_inventory"].append({"instance_id": inst, "fish_id": f["id"], "size": size, "value": value})
-    S["stats"]["total_caught"] += 1; first = _upd_enc(f, size, value)
-    bonus = RARITY[f["rarity"]]["discovery_bonus"] if first else 0
-    if bonus: S["points"] += bonus
+    inst, first, bonus = _record_catch(f, size, value)
     S["local_dry"] = 0 if first else S.get("local_dry", 0) + 1
+    # 渔获热潮（上一事件挂的 buff）：本竿这条再翻一条
+    fever_line = ""
+    if S.get("fever", 0) > 0:
+        S["fever"] -= 1
+        di, dfirst, _b = _record_catch(f, size, value)
+        fever_line = "\n🔥 热潮翻倍：又得一条 %s%s（%s）" % (f["name"], "★新" if dfirst else "", di)
     bite = _bite_line(rng, f["rarity"])
     bonus_line = ("\n🎉 图鉴新发现！首次收录奖励 +%d 点" % bonus) if bonus else ""
-    return {"text": season_msg + "%s\n%s%s\n%s%s%s" % (bite, _format_catch(f, size, value, inst, first), bonus_line, _footer(), _ambience(loc, rng), _secret_hint()),
-            "consumed": True, "kind": "fish", "fish_name": f["name"], "rarity": f["rarity"], "first": first, "season_changed": season_changed}
+    luck_line, luck_id = _roll_luck(rng, pool, bait_id, f, size, inst)   # 小概率幸运事件
+    luck_seg = ("\n" + luck_line) if luck_line else ""
+    return {"text": season_msg + "%s\n%s%s%s%s\n%s%s%s" % (bite, _format_catch(f, size, value, inst, first), bonus_line, fever_line, luck_seg, _footer(), _ambience(loc, rng), _secret_hint()),
+            "consumed": True, "kind": "fish", "fish_name": f["name"], "rarity": f["rarity"], "first": first, "season_changed": season_changed, "luck": luck_id, "fever_hit": fever_line != ""}
 
 def _c_cast(bait_id):
     rng = _Rng(S["rngState"], S["rngCalls"])
@@ -516,7 +585,7 @@ def _cast_many(bait_id, times, stop_on):
             highlights.append(r["text"]); stop_reason = "没饵了"; break
         done += 1
         rank = _RARITY_RANK.get(r.get("rarity", ""), 0)
-        if r.get("first") or rank >= 2 or r["kind"] == "event" or r["season_changed"]:
+        if r.get("first") or rank >= 2 or r["kind"] == "event" or r["season_changed"] or r.get("luck") or r.get("fever_hit"):
             highlights.append(r["text"])
         if r["kind"] == "fish":
             caught[r["fish_name"]] = caught.get(r["fish_name"], 0) + 1; caught_n += 1
@@ -550,7 +619,7 @@ _HELP = """文字钓鱼游戏（你是玩家）。用点数买鱼饵→抛竿→
   cmd('encyclopedia')         看图鉴收集进度
   cmd('look <id或中文名>')     细看鱼/地点/鱼饵/季节/物品（如 cmd('look 月鳞鲤')；没钓到的鱼显示 ？？？）
   cmd('A; B; C')              把多条指令用 ; 或换行串成一批、一次执行（最多 8 条），如 cmd('buy basic_worm 10; cast 10')、cmd('goto reed_river; cast 8 stop=new')
-抛竿偶尔会遇到漂流瓶/宝箱/宝物等惊喜事件。每次返回末尾都有一行 📊 状态栏 JSON（点数/地点/季节/回合/图鉴/余饵/未卖渔获），看它就够、不必再单独 status。
+抛竿偶尔会遇到漂流瓶/宝箱/宝物等惊喜事件；钓到鱼时也偶有幸运时刻（分裂鱼钩/渔获热潮/河神祝福…），可遇不可求。每次返回末尾都有一行 📊 状态栏 JSON（点数/地点/季节/回合/图鉴/余饵/未卖渔获；fever=剩余翻倍、free_bait=剩余免饵），看它就够、不必再单独 status。
 goto 清单会标出每个钓点当季还有几种没见过的鱼（含单列的传说级），照着去补图鉴。
 目标：用有限点数把图鉴里的鱼尽量集满（有的鱼只在特定地点+季节出现）。一开始你并不知道有哪些鱼——靠抛竿去发现。"""
 
