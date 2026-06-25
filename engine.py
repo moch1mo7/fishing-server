@@ -682,6 +682,384 @@ ITEMS = json.loads(r"""{"coral_pearl":{"id":"coral_pearl","name":"珊瑚珍珠",
 # 水下专属宝箱（不进水面事件池，靠潜水幸运事件 seafloor_vault 投放；open 时和 EVENTS 一并查表）。
 DIVE_EVENTS = json.loads(r"""{"seafloor_vault":{"id":"seafloor_vault","name":"海底宝库","type":"chest","description":"嵌在海床裂缝里的一只覆满贝壳与珊瑚的青铜箱，锁早已锈死，缝里却渗出珠光。","lock":{"or_points":120},"loot_table":[{"weight":35,"reward":{"points_range":[180,350]}},{"weight":22,"reward":{"items":[{"id":"mermaid_tear","qty":1}]}},{"weight":20,"reward":{"items":[{"id":"coral_crown","qty":1},{"id":"coral_pearl","qty":1}]}},{"weight":13,"reward":{"oxygen":5}},{"weight":10,"reward":{"items":[{"id":"ancient_relic","qty":1},{"id":"gem_sapphire","qty":1}]}}]}}""")
 
+# 水下奇遇表（潜水幸运事件的数据源，纯数据；加新奇观=只加条目）。reward 交给 _grant_rewards 通用解析。
+ITEMS.update(json.loads(r"""
+{
+ "giant_clam_pearl": {
+  "id": "giant_clam_pearl",
+  "name": "砗磲灵珠",
+  "type": "treasure",
+  "description": "自巨型砗磲体内取出的浑圆珠，月光下流转虹彩，传说佩戴者能与贝壳耳语。",
+  "value": 380,
+  "sellable": true
+ },
+ "icebound_chart": {
+  "id": "icebound_chart",
+  "name": "冰封的航海图",
+  "type": "treasure",
+  "description": "封在永冻冰块里的古航海图，标注着一处不存于任何海图上的秘境——可惜一遇暖流就会融化。",
+  "value": 480,
+  "sellable": true
+ },
+ "siren_scale": {
+  "id": "siren_scale",
+  "name": "海妖的鳞片",
+  "type": "treasure",
+  "description": "一片泛着幽绿的鳞，边缘锋利如刃，依稀残留着令水手甘愿跃入深海的低吟。",
+  "value": 350,
+  "sellable": true
+ },
+ "salt_crystal_rose": {
+  "id": "salt_crystal_rose",
+  "name": "盐晶玫瑰",
+  "type": "treasure",
+  "description": "海底盐矿裂隙中自然生长的晶体，形如一朵盛开的玫瑰，轻舔舌尖满是海的咸涩。",
+  "value": 200,
+  "sellable": true
+ },
+ "lighthouse_lens_shard": {
+  "id": "lighthouse_lens_shard",
+  "name": "灯塔透镜碎片",
+  "type": "treasure",
+  "description": "沉没灯塔的巨型透镜碎片，依旧能将深海微光聚成一束暖黄，像被困在海底的落日。",
+  "value": 180,
+  "sellable": true
+ },
+ "dragon_king_scale": {
+  "id": "dragon_king_scale",
+  "name": "龙王逆鳞",
+  "type": "treasure",
+  "description": "传说龙王心口那片逆生的鳞，触之生温，能令深海暗流中的邪物纷纷退避，如遇君王。",
+  "value": 850,
+  "sellable": true
+ },
+ "abyss_black_pearl": {
+  "id": "abyss_black_pearl",
+  "name": "深渊黑珍珠",
+  "type": "treasure",
+  "description": "在深渊裂隙极寒高压下孕育的黑珠，内里有旋动的幽蓝星尘，仿佛锁着一片微型宇宙。",
+  "value": 400,
+  "sellable": true
+ },
+ "whale_bone_pearl": {
+  "id": "whale_bone_pearl",
+  "name": "鲸骨髓珠",
+  "type": "treasure",
+  "description": "从鲸落脊椎骨中剥出的髓石，幽白如玉，轻叩时会发出次声波般深入胸膛的低鸣。",
+  "value": 380,
+  "sellable": true
+ },
+ "ancient_sea_page": {
+  "id": "ancient_sea_page",
+  "name": "古海图书页",
+  "type": "treasure",
+  "description": "泡不烂的古羊皮纸残页，写满早已失传的海语文字，边角还夹着一缕干透的海藻。",
+  "value": 320,
+  "sellable": true
+ },
+ "jellyfish_heart": {
+  "id": "jellyfish_heart",
+  "name": "发光水母之心",
+  "type": "treasure",
+  "description": "一枚脉动着微光的半透明器官，捧在手心如捧着一颗坠落海底的恒星，温热而羞怯。",
+  "value": 550,
+  "sellable": true
+ },
+ "altar_blood_jade": {
+  "id": "altar_blood_jade",
+  "name": "祭坛血玉",
+  "type": "treasure",
+  "description": "浸满祭献之血的白玉璧，夜深时渗出细密水珠，如远方大海在黑暗里无声哭泣。",
+  "value": 600,
+  "sellable": true
+ },
+ "lost_bell": {
+  "id": "lost_bell",
+  "name": "失落的钟铃",
+  "type": "treasure",
+  "description": "沉没钟楼的青铜钟铃，铃舌早已锈断，被水流拨动时，仍有低回的余音撞进潜水员的胸腔。",
+  "value": 900,
+  "sellable": true
+ }
+}
+"""))
+DIVE_ENCOUNTERS = json.loads(r"""
+[
+ {
+  "emoji": "🪸",
+  "id": "coral_palace",
+  "name": "珊瑚宫",
+  "weight": 10,
+  "text": "你撞见一座由活珊瑚天然长成的水下宫殿，殿宇随波摇曳，枝桠间还垂着细小的珍珠。",
+  "reward": {
+   "item_pool": [
+    {
+     "id": "coral_pearl",
+     "weight": 3
+    },
+    {
+     "id": "coral_crown",
+     "weight": 1
+    }
+   ]
+  }
+ },
+ {
+  "emoji": "🧜‍♀️",
+  "id": "mermaid_palace",
+  "name": "人鱼宫殿",
+  "weight": 6,
+  "text": "一队人鱼把你引进她们的珍珠宫殿，殿内珠玉生辉，临别她们赠你一件珍宝。",
+  "reward": {
+   "item_pool": [
+    {
+     "id": "mermaid_tear",
+     "weight": 2
+    },
+    {
+     "id": "moonstone",
+     "weight": 2
+    },
+    {
+     "id": "ambergris",
+     "weight": 1
+    }
+   ]
+  }
+ },
+ {
+  "emoji": "🏛️",
+  "id": "ancient_ruins",
+  "name": "古遗迹",
+  "weight": 8,
+  "text": "你潜入一片古文明的水下遗迹，断碑残柱间残字斑驳，淤沙里埋着旧日的器物与散落的金币。",
+  "reward": {
+   "items": [
+    {
+     "id": "ancient_relic",
+     "qty": 1
+    }
+   ],
+   "points_range": [
+    40,
+    120
+   ]
+  }
+ },
+ {
+  "emoji": "🧰",
+  "id": "deep_vault",
+  "name": "海底宝库",
+  "weight": 6,
+  "text": "海床裂缝里嵌着一只覆满贝壳与珊瑚的青铜箱，锁早已锈死，缝里却渗出珠光。",
+  "reward": {
+   "chest": "seafloor_vault"
+  }
+ },
+ {
+  "id": "shipwreck_graveyard",
+  "name": "沉船墓场",
+  "weight": 10,
+  "text": "一片倾斜的桅杆森林在半明半暗中浮现，锈蚀的船壳层叠如巨鱼的鳞片。你穿梭在破碎的舱室间，从积沙里拾起几件被遗忘的碎梦。",
+  "reward": {
+   "points_range": [
+    40,
+    120
+   ],
+   "item_pool": [
+    {
+     "id": "lighthouse_lens_shard",
+     "weight": 4
+    },
+    {
+     "id": "salt_crystal_rose",
+     "weight": 3
+    },
+    {
+     "id": "shipwreck_coin",
+     "weight": 5
+    },
+    {
+     "id": "coral_crown",
+     "weight": 2
+    }
+   ]
+  }
+ },
+ {
+  "id": "giant_clam",
+  "name": "巨型砗磲",
+  "weight": 9,
+  "text": "比双人床还大的砗磲半嵌在白沙里，虹彩壳缘微微翕动。你小心探手入内，柔软的外套膜裹住你的手腕，将一颗浑圆的珠子轻轻推到你指间。",
+  "reward": {
+   "oxygen": 1,
+   "item_pool": [
+    {
+     "id": "giant_clam_pearl",
+     "weight": 5
+    },
+    {
+     "id": "coral_pearl",
+     "weight": 3
+    }
+   ]
+  }
+ },
+ {
+  "id": "jellyfish_dome",
+  "name": "发光水母穹顶",
+  "weight": 7,
+  "text": "成千上万只橘粉与冰蓝的水母聚成穹顶，将一片沉没的庭院罩在诡丽的柔光里。穹顶中央，一团脱落的心脏缓缓沉降，正好落入你的掌心。",
+  "reward": {
+   "items": [
+    {
+     "id": "jellyfish_heart",
+     "qty": 1
+    }
+   ],
+   "oxygen": 1
+  }
+ },
+ {
+  "id": "whale_fall",
+  "name": "鲸落",
+  "weight": 7,
+  "text": "你随一串上升的泡沫降至深渊平原，一副鲸骨静卧在惨白的食骨蠕虫花丛间。你游进肋骨笼腔，指尖触到一枚幽白髓珠，它用次声波轻敲你的掌心。",
+  "reward": {
+   "points_range": [
+    30,
+    60
+   ],
+   "item_pool": [
+    {
+     "id": "whale_bone_pearl",
+     "weight": 4
+    },
+    {
+     "id": "ambergris",
+     "weight": 2
+    },
+    {
+     "id": "moonstone",
+     "weight": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "siren_lair",
+  "name": "海妖巢穴",
+  "weight": 6,
+  "text": "嶙峋的岩洞内壁嵌满沉船的碎木与人的遗物，一把把锈剑如装饰般排列。你在暗处发现一片幽绿的鳞，指尖刚碰上，耳边便响起勾魂的轻笑。",
+  "reward": {
+   "oxygen": 2,
+   "item_pool": [
+    {
+     "id": "siren_scale",
+     "weight": 4
+    },
+    {
+     "id": "mermaid_tear",
+     "weight": 3
+    },
+    {
+     "id": "coral_pearl",
+     "weight": 2
+    }
+   ]
+  }
+ },
+ {
+  "id": "sacrificial_altar",
+  "name": "献祭石坛",
+  "weight": 6,
+  "text": "一圈坍塌的石柱拱卫着中央黑坛，坛面上暗红的纹路遇水竟微微渗血。你触到一枚温润的白玉璧，掌心旋即漫开咸涩的湿意——是古老祭品的泪。",
+  "reward": {
+   "item_pool": [
+    {
+     "id": "altar_blood_jade",
+     "weight": 4
+    },
+    {
+     "id": "ancient_relic",
+     "weight": 3
+    },
+    {
+     "id": "mermaid_tear",
+     "weight": 2
+    }
+   ]
+  }
+ },
+ {
+  "id": "abyss_crevice",
+  "name": "深渊裂隙",
+  "weight": 5,
+  "text": "海床被撕开一道狭长的伤口，幽蓝冷光如大地的呼吸般明灭。你冒险下探，在裂缝壁上撬下一颗黑珍珠，珠中星尘流转，深不见底。",
+  "reward": {
+   "points_range": [
+    50,
+    100
+   ],
+   "item_pool": [
+    {
+     "id": "abyss_black_pearl",
+     "weight": 5
+    },
+    {
+     "id": "moonstone",
+     "weight": 2
+    }
+   ]
+  }
+ },
+ {
+  "id": "ancient_chart_room",
+  "name": "远古海图密室",
+  "weight": 5,
+  "text": "你撞进一艘沉船的舰长室，整面墙上嵌着巨大的星图与海图，羊皮纸被冰封在透明晶体内。你撬开一只鲨皮匣，寒气与墨香一起涌出。",
+  "reward": {
+   "points_range": [
+    40,
+    90
+   ],
+   "chest": "seafloor_vault"
+  }
+ },
+ {
+  "id": "sunken_belfry",
+  "name": "失落的钟楼",
+  "weight": 5,
+  "text": "斜插在沙中的哥特钟楼沉默如碑，钟架已朽，唯那口青铜巨钟仍半悬着。你游上去轻推，钟铃发出一声低回的叹息，仿佛在等你带它离开。",
+  "reward": {
+   "items": [
+    {
+     "id": "lost_bell",
+     "qty": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "dragon_king_palace",
+  "name": "龙王宫阙",
+  "weight": 3,
+  "text": "金琉璃瓦与血珊瑚梁在深渊边缘隐隐生光，两扇殿门为你无声敞开。殿内空无一人，唯独一枚逆鳞浮在海水中央，触及皮肤时带着古老的体温。",
+  "reward": {
+   "items": [
+    {
+     "id": "dragon_king_scale",
+     "qty": 1
+    }
+   ],
+   "oxygen": 3
+  }
+ }
+]
+""")
+_DIVE_ENC_BY_ID = {e["id"]: e for e in DIVE_ENCOUNTERS}
+
+
 _SAVE = os.path.join(os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else ".", "fishing_save.json")
 _IO_WARN = ""   # 存档读/写出问题时的一次性提示；cmd() 会把它贴在输出末尾，不再静默吞掉
 
@@ -790,8 +1168,17 @@ def _grant_rewards(rng, rw):
         S["bait_inventory"][b["id"]] = S["bait_inventory"].get(b["id"], 0) + b["qty"]; parts.append("%s×%d" % (BAITS.get(b["id"], {}).get("name", b["id"]), b["qty"]))
     for it in rw.get("items", []):
         S["items"][it["id"]] = S["items"].get(it["id"], 0) + it["qty"]; parts.append("%s×%d" % (ITEMS.get(it["id"], {}).get("name", it["id"]), it["qty"]))
+    if rw.get("item_pool"):   # 从池中按权重随机得 1 件
+        iid = _pick_by_weight(rng, rw["item_pool"])["id"]
+        S["items"][iid] = S["items"].get(iid, 0) + 1; parts.append("%s×1" % ITEMS.get(iid, {}).get("name", iid))
     if rw.get("oxygen"):
         S["oxygen"] = S.get("oxygen", 0) + rw["oxygen"]; S["oxygen_ever"] = True; parts.append("氧气瓶×%d" % rw["oxygen"])
+    if rw.get("chest"):   # 得到一只待开宝箱（event_id 在 EVENTS 或 DIVE_EVENTS）
+        S["stats"]["total_chests"] = S["stats"].get("total_chests", 0) + 1
+        cuid = "ch_%03d" % S["stats"]["total_chests"]
+        S["pending_chests"].append({"chest_uid": cuid, "event_id": rw["chest"]})
+        cname = (EVENTS.get(rw["chest"]) or DIVE_EVENTS.get(rw["chest"]) or {}).get("name", "宝箱")
+        parts.append("%s（待开，open %s）" % (cname, cuid))
     return parts
 def _letter_exhausted(e):
     return bool(e.get("unique")) and len(S["seen_letters"].get(e["id"], [])) >= len(e.get("messages", []))
@@ -1072,16 +1459,16 @@ _LUCK_EVENTS = [
     {"id": "lucky_pearl", "weight": 8},
 ]
 # 水下专属幸运事件：只在潜水时进入抽取池（撞见水下奇观、捡珍宝/宝库）
-_DIVE_LUCK_EVENTS = [
-    {"id": "coral_palace", "weight": 10},
-    {"id": "mermaid_palace", "weight": 6},
-    {"id": "ancient_ruins", "weight": 8},
-    {"id": "seafloor_vault", "weight": 6},
-]
 _PEARL_TREASURES = ["coral_pearl", "gem_sapphire", "moonstone", "ambergris", "shipwreck_coin"]   # 蚌中生珠固定池（新水下遗物不进，保持水面一致）
+# 潜水奇遇解析：纯数据驱动（DIVE_ENCOUNTERS），奖励交给 _grant_rewards 通用处理。加新奇观=只加数据。
+def _resolve_dive_encounter(rng, enc):
+    parts = _grant_rewards(rng, enc.get("reward"))
+    body = ("\n🎁 获得 " + "、".join(parts)) if parts else ""
+    return "%s ✨【%s】%s%s" % (enc.get("emoji", "🌊"), enc["name"], enc["text"], body)
 def _roll_luck(rng, pool, bait_id, f, size, inst, mode="cast"):
     if rng.random() >= LUCK_CHANCE: return "", None
-    eid = _pick_by_weight(rng, _LUCK_EVENTS + (_DIVE_LUCK_EVENTS if mode == "dive" else []))["id"]
+    dive_pool = [{"id": e["id"], "weight": e["weight"]} for e in DIVE_ENCOUNTERS] if mode == "dive" else []
+    eid = _pick_by_weight(rng, _LUCK_EVENTS + dive_pool)["id"]
     if eid == "split_hook":   # 鱼钩一分为三：再钓上两条
         weights = [_eff_weight(g, S["location_id"], S["season_id"], bait_id) for g in pool]
         got = []
@@ -1114,24 +1501,8 @@ def _roll_luck(rng, pool, bait_id, f, size, inst, mode="cast"):
         tk = _PEARL_TREASURES[rng.rint(0, len(_PEARL_TREASURES) - 1)]
         S["items"][tk] = S["items"].get(tk, 0) + 1
         return "🦪✨ 蚌中生珠！鱼肚里滚出一枚%s（可 sell item %s）。" % (ITEMS[tk]["name"], tk), eid
-    # ── 水下专属：撞见水下奇观，捡珍宝 / 古遗物 / 海底宝库 ──
-    if eid == "coral_palace":
-        tk = _pick_by_weight(rng, [{"id": "coral_pearl", "weight": 3}, {"id": "coral_crown", "weight": 1}])["id"]
-        S["items"][tk] = S["items"].get(tk, 0) + 1
-        return "🪸 你撞见一座由活珊瑚长成的水下宫殿，从摇曳的枝桠间拾得一枚%s（sell item %s 可卖）。" % (ITEMS[tk]["name"], tk), eid
-    if eid == "mermaid_palace":
-        tk = _pick_by_weight(rng, [{"id": "mermaid_tear", "weight": 2}, {"id": "moonstone", "weight": 2}, {"id": "ambergris", "weight": 1}])["id"]
-        S["items"][tk] = S["items"].get(tk, 0) + 1
-        return "🧜‍♀️🏰 一队人鱼把你引进她们的珍珠宫殿，临别赠你一件珍宝：%s（sell item %s 可卖）。" % (ITEMS[tk]["name"], tk), eid
-    if eid == "ancient_ruins":
-        S["items"]["ancient_relic"] = S["items"].get("ancient_relic", 0) + 1
-        p = rng.rint(40, 120); S["points"] += p
-        return "🏛️ 你潜入一片古文明的水下遗迹，断碑残柱间掘出一件远古遗物，还摸到散落的 %d 点金币。" % p, eid
-    if eid == "seafloor_vault":
-        S["stats"]["total_chests"] = S["stats"].get("total_chests", 0) + 1
-        cuid = "ch_%03d" % S["stats"]["total_chests"]
-        S["pending_chests"].append({"chest_uid": cuid, "event_id": "seafloor_vault"})
-        return "🧰 海床裂缝里嵌着一只覆满贝壳的海底宝库（%s）。（用 open %s 打开）" % (cuid, cuid), eid
+    enc = _DIVE_ENC_BY_ID.get(eid)   # 水下奇遇（数据驱动）
+    if enc: return _resolve_dive_encounter(rng, enc), eid
     return "", None
 
 _DIVE_JUNK = ["一截缠满水草的烂绳", "半扇生满藤壶的空贝壳", "一块硌手的礁石", "一只空了的海螺", "一团黏糊糊的水绵"]
