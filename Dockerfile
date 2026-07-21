@@ -17,4 +17,6 @@ ENV FISHING_PORT=3457
 ENV FISHING_ENGINE=fishing
 EXPOSE 3457
 
-CMD ["python", "server.py"]
+# 内置自唤醒：每 9 分钟 self-ping 一次，防止 Render 免费层休眠
+# 后台 while 循环用 wget 请求本地 /mcp；sleep 540 = 9 分钟，留 6 分钟余量
+CMD ["sh", "-c", "(while true; do sleep 540; wget -q -O /dev/null http://localhost:3457/mcp || true; done) & exec python server.py"]
