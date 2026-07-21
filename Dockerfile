@@ -12,7 +12,10 @@ RUN wget -q https://raw.githubusercontent.com/mumuer1024/ai-fishing-game/main/fi
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 存档目录（Render Disk 挂载点，跨部署持久化）
+# 复制存档同步脚本
+COPY sync_save.py /app/sync_save.py
+
+# 存档目录
 RUN mkdir -p /app/data
 
 ENV FISHING_HOST=0.0.0.0
@@ -20,6 +23,6 @@ ENV FISHING_PORT=3457
 ENV FISHING_ENGINE=fishing
 EXPOSE 3457
 
-# 内置自唤醒：每 9 分钟 self-ping 一次，防止 Render 免费层休眠
-# 后台 while 循环用 wget 请求本地 /mcp；sleep 540 = 9 分钟，留 6 分钟余量
-CMD ["sh", "-c", "(while true; do sleep 540; wget -q -O /dev/null http://localhost:3457/mcp || true; done) & exec python server.py"]
+# sync_save.py 负责启动时从 Supabase 下载存档，退出时上传
+# 内置自唤醒：每 9 分钟 self-ping 一次
+CMD ["sh", "-c", "(while true; do sleep 540; wget -q -O /dev/null http://localhost:3457/mcp || true; done) & exec python sync_save.py"]
