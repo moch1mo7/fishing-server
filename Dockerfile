@@ -12,6 +12,9 @@ RUN wget -q https://raw.githubusercontent.com/mumuer1024/ai-fishing-game/main/fi
 
 RUN pip install --no-cache-dir -r requirements.txt
 
+# 存档目录（Render Disk 挂载点，跨部署持久化）
+RUN mkdir -p /app/data
+
 ENV FISHING_HOST=0.0.0.0
 ENV FISHING_PORT=3457
 ENV FISHING_ENGINE=fishing
